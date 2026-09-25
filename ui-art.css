@@ -1,0 +1,93 @@
+/* ============================================================
+   UI 艺术覆写层 — 哥特材质与铁艺边框 (v1)
+   在 style.css 之后加载，仅覆写视觉效果，不改布局逻辑。
+   素材：art/ui/panel-stone.jpg（石纹）、panel-leather.jpg（皮革）、
+        frame-ornate-cut.jpg（铁艺边框，已裁掉白边 896×896）
+   UItask 对应：材质化背景 ✅ 装饰性边框 ✅
+   ============================================================ */
+
+        /* 面板：石质纹理垫底，暗色渐变压暗，保证金色文字对比度（原亮度29/255） */
+        .panel {
+            border: 14px solid transparent;
+            border-image: url('art/ui/frame-ornate-cut.jpg') 46 round;
+            background:
+                linear-gradient(180deg, rgba(30, 27, 22, 0.88) 0%, rgba(12, 12, 14, 0.92) 42%, rgba(6, 6, 7, 0.95) 100%),
+                url('art/ui/panel-stone.jpg');
+            background-size: auto, 256px 256px;
+            background-repeat: no-repeat, repeat;
+        }
+
+        /* 面板标题条：皮革纹理，压暗避免喧宾夺主 */
+        .panel-header {
+            background:
+                linear-gradient(rgba(10, 8, 6, 0.45), rgba(10, 8, 6, 0.45)),
+                linear-gradient(90deg, transparent, rgba(111, 90, 55, 0.25), transparent),
+                url('art/ui/panel-leather.jpg');
+            background-size: auto, auto, 180px 180px;
+            background-repeat: no-repeat, no-repeat, repeat;
+        }
+
+        /* 底部HUD：石纹自下而上渗出，顶部保留原透明淡出 */
+        #bottom-hud {
+            background:
+                radial-gradient(ellipse at center bottom, rgba(124, 82, 32, 0.22) 0%, rgba(8, 8, 8, 0.86) 44%, transparent 76%),
+                linear-gradient(to top, rgba(5, 5, 6, 0.97) 0%, rgba(13, 12, 11, 0.80) 48%, rgba(13, 12, 11, 0.45) 100%),
+                url('art/ui/panel-stone.jpg');
+            background-size: auto, auto, 200px 200px;
+            background-repeat: no-repeat, no-repeat, repeat;
+        }
+
+        /* 桌面端：背包/仓库为固定尺寸格，加宽面板抵消边框占用，保持格子可用宽度不变
+           仅桌面生效，避免覆盖 style.css 的移动端宽度规则 */
+        @media (min-width: 769px) {
+            #inventory-panel {
+                width: 348px;   /* 320 + 28 边框补偿 */
+            }
+
+            #stash-panel {
+                width: 378px;   /* 350 + 28 边框补偿 */
+            }
+        }
+
+        /* 平板/手机：收窄铁艺边框，按比例缩小切片，避免窄屏挤压内容 */
+        @media (max-width: 768px) {
+            .panel {
+                border-width: 10px;
+                border-image-slice: 33;
+                background-size: auto, 192px 192px;
+            }
+        }
+
+        /* 超小屏幕（iPhone SE等）：边框再收窄 */
+        @media (max-width: 375px) {
+            .panel {
+                border-width: 8px;
+                border-image-slice: 26;
+            }
+        }
+
+        /* 关闭按钮移入铁艺边框内侧，不再遮挡边框角饰 */
+        .panel-close {
+            top: 22px;
+            right: 22px;
+        }
+
+        @media (max-width: 768px) {
+            .panel-close {
+                top: 16px;
+                right: 16px;
+            }
+        }
+
+        @media (max-width: 375px) {
+            .panel-close {
+                top: 14px;
+                right: 14px;
+            }
+        }
+
+        /* 自定义光标：素材待生成（cursor-steel/cursor-gold），预留接入点
+        body {
+            cursor: url('art/ui/cursor-steel-32.png') 2 2, auto;
+        }
+        */

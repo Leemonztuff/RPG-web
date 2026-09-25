@@ -811,6 +811,7 @@ const player = {
     },
     // 套装追踪 - 记录当前穿戴的套装件数 { 'tals_set': 3, 'immortal_king': 2 }
     equippedSets: {},
+    headId: "hair01",             // Paper Doll 头部（hair01-hair07），存档持久化
     // 记录每层 Boss 的下次刷新时间戳（毫秒）
     bossRespawn: {},
     inventory: Array(30).fill(null),
@@ -2972,6 +2973,17 @@ function getCurrentHeroAction() {
 }
 
 function getHeroFrame(direction) {
+    // Paper Doll 合成帧：按当前装备与头部渲染身体/护甲层，未就绪时回退原素材
+    if (typeof PaperDoll !== "undefined" && !player.isDead && player.heroAction !== "death") {
+        const action0 = getCurrentHeroAction();
+        if (!["attack", "cast", "hurt", "sit"].includes(action0)) {
+            const pdAction = player.moving ? "walk" : "idle";
+            const fpsMap = { idle: 3, walk: 7 };
+            const f = Math.floor((player.animTime || 0) * fpsMap[pdAction]) % 4;
+            const pd = PaperDoll.playerFrame(normalizeHeroDirection(direction), f, false);
+            if (pd) return pd;
+        }
+    }
     const action = getCurrentHeroAction();
     const safeDirection = action === 'sit' ? 'front' : normalizeHeroDirection(direction);
     if (typeof ArtSamples !== 'undefined') {
@@ -5184,6 +5196,7 @@ function startGame() {
 
         // 向后兼容：套装系统
         if (!player.equippedSets) player.equippedSets = {};
+        if (!player.headId) player.headId = "hair01";   // Paper Doll 兼容旧存档
         if (!player.discoveredSetPieces) player.discoveredSetPieces = {};
         if (!player.discoveredMonsters) player.discoveredMonsters = {};
 
@@ -8648,12 +8661,24 @@ function draw() {
         const n = npcs[ni];
         const nx = Math.round(n.x);
         const ny = Math.round(n.y);
-        drawContactShadow(ctx, nx, ny - 2, 32, 8, 0.24);
-        const paintedNpc = EnvironmentArt.npc(n.type);
+        let legacyNpc = null;
+        const paintedNpc = (typeof PaperDoll !== "undefined") ? PaperDoll.npcFrame(n.name, n.facingDirection || "front", 0, false) : null;
+        // NPC 与玩家使用同一张320px合成帧、同一可见高度，阴影按同一比例缩放
+        const npcRenderH = paintedNpc ? PaperDoll.NPC_RENDER_HEIGHT : 52;
+        drawContactShadow(ctx, nx, ny - 2, Math.round(npcRenderH * 0.39), Math.round(npcRenderH * 0.107), 0.24);
         if (paintedNpc) {
-            const b = paintedNpc.contentBounds;
+            const pdH = npcRenderH;
+            const pdW = pdH * paintedNpc.width / paintedNpc.height;
+            if (!window.__paperDollNpcLogged) {
+                window.__paperDollNpcLogged = true;
+                console.info('[PaperDoll] NPC 渲染确认使用合成帧', { w: pdW, h: pdH });
+            }
+            ctx.drawImage(paintedNpc.source, 0, 0, paintedNpc.width, paintedNpc.height,
+                nx - pdW / 2, ny - pdH, pdW, pdH);
+        } else if ((legacyNpc = EnvironmentArt.npc(n.type))) {
+            const b = legacyNpc.contentBounds;
             const h = 52, w = h * b.sw / b.sh;
-            ctx.drawImage(paintedNpc.source, b.sx, b.sy, b.sw, b.sh, nx - w / 2, ny - h, w, h);
+            ctx.drawImage(legacyNpc.source, b.sx, b.sy, b.sw, b.sh, nx - w / 2, ny - h, w, h);
         } else if (spritesLoaded && processedSpriteSheet && n.frameIndex !== undefined) {
             const frame = getNPCFrame(n.frameIndex);
             const renderHeight = 52;
@@ -8667,14 +8692,14 @@ function draw() {
         // Quest Indicators (above name)
         if (n.type === 'healer') {
             if (player.questState === 0) {
-                ctx.fillStyle = '#ffff00'; ctx.font = '20px Arial'; ctx.fillText("!", nx, ny - 80);
+                ctx.fillStyle = '#ffff00'; ctx.font = '20px Arial'; ctx.fillText("!", nx, ny - npcRenderH - 34);
             } else if (player.questState === 2) {
-                ctx.fillStyle = '#ffff00'; ctx.font = '20px Arial'; ctx.fillText("?", nx, ny - 80);
+                ctx.fillStyle = '#ffff00'; ctx.font = '20px Arial'; ctx.fillText("?", nx, ny - npcRenderH - 34);
             }
         }
 
         // Name (above character)
-        ctx.fillStyle = '#fff'; ctx.font = '12px Cinzel'; ctx.textAlign = 'center'; ctx.fillText(n.name, nx, ny - 70);
+        ctx.fillStyle = '#fff'; ctx.font = '12px Cinzel'; ctx.textAlign = 'center'; ctx.fillText(n.name, nx, ny - npcRenderH - 12);
 
         // 深渊守卫特殊显示：本周王者
         if (n.type === 'difficulty' && typeof AbyssSystem !== 'undefined') {
@@ -8684,7 +8709,7 @@ function draw() {
             ctx.fillStyle = '#ff8800';
             ctx.shadowColor = '#ff4400';
             ctx.shadowBlur = 8;
-            ctx.fillText(`🔥 本周王者: ${champion}`, nx, ny - 85);
+            ctx.fillText(`🔥 本周王者: ${champion}`, nx, ny - npcRenderH - 48);
             ctx.restore();
         }
     }
@@ -8774,8 +8799,14 @@ function draw() {
     if (heroFrame.source || (heroSpritesLoaded && processedHeroSprites) || (spritesLoaded && processedSpriteSheet)) {
         const frame = heroFrame;
         const useHeroSheet = !!frame.source || (heroSpritesLoaded && processedHeroSprites && frame.animated);
-        const renderHeight = useHeroSheet ? HERO_SPRITE_CONFIG.renderSize : 48;
+        // Paper Doll 合成帧已裁掉顶部透明区；按可见高度等比渲染，不压扁
+        const renderHeight = frame.paperDoll && typeof PaperDoll !== "undefined"
+            ? PaperDoll.RENDER_HEIGHT : (useHeroSheet ? HERO_SPRITE_CONFIG.renderSize : 48);
         const renderWidth = renderHeight * frame.width / frame.height;
+        if (frame.paperDoll && !window.__paperDollDrawLogged) {
+            window.__paperDollDrawLogged = true;
+            console.info('[PaperDoll] 玩家渲染确认使用合成帧', { w: renderWidth, h: renderHeight });
+        }
         const scale = useHeroSheet ? 1 : 1 + player.attackAnim * 0.2;
 
         let source = useHeroSheet ? processedHeroSprites : processedSpriteSheet;
